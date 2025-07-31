@@ -3,47 +3,64 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const dotenv = require('dotenv');
 const generateThankYouTemplate = require('./emailTemplate');
 
+dotenv.config(); // Load env vars from .env
+
 const app = express();
-app.use(cors());
+
+// Middlewares
+app.use(cors({
+  origin: ['https://your-portfolio-url.vercel.app'], // ✅ Set to your deployed frontend domain
+  methods: ['POST'],
+  credentials: true,
+}));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+// API route
 app.post('/send', async (req, res) => {
   const { form_name, from_email, message } = req.body;
 
-  // Configure mail transporter
-  let transporter = nodemailer.createTransport({
-    service: 'Gmail',
-    auth: {
-      user: 'nasirsharifqasoori786@gmail.com',        // 🔐 your Gmail
-      pass: 'llrnqpeedbejqfuh',     // 📌 Gmail App Password
-    },
-  });
+  // ✅ Input Validation
+  if (!form_name || !from_email || !message) {
+    return res.status(400).json({ error: 'All fields are required.' });
+  }
 
   try {
-    // 1. Send email to **yourself**
+    // Configure transporter
+    const transporter = nodemailer.createTransport({
+      service: 'Gmail',
+      auth: {
+        user: process.env.EMAIL_USERNAME, // from .env
+        pass: process.env.EMAIL_APP_PASSWORD, // from .env (App Password)
+      },
+    });
+
+    // Send email to yourself
     await transporter.sendMail({
       from: from_email,
-      to: 'nasirsharifqasoori786@gmail.com',
+      to: process.env.EMAIL_USERNAME,
       subject: `New message from ${form_name}`,
       text: message,
     });
 
-    // 2. Send **thank you email** to the **user**
+    // Auto-reply to user
     await transporter.sendMail({
-      from: 'nasirsharifqasoori786@gmail.com',
+      from: process.env.EMAIL_USERNAME,
       to: from_email,
       subject: 'Thank you for contacting Nasir Sharif!',
       html: generateThankYouTemplate(form_name),
     });
 
     res.status(200).json({ message: 'Emails sent successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to send emails' });
+
+  } catch (error) {
+    console.error('Email sending error:', error);
+    res.status(500).json({ error: 'Failed to send email. Please try again later.' });
   }
 });
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`📡 Server running on port ${PORT}`));
